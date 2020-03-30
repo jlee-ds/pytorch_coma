@@ -1,2 +1,8 @@
 *.pyc
 *.npy
+data
+checkpoints
+imgs
+runs
+__pycache__
+.DS_Store
