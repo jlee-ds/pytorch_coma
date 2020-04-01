@@ -13,7 +13,7 @@ def set_default_parameters(config):
     config.set('Model Parameters', 'eval', False)
     config.set('Model Parameters', 'checkpoint_file', '')
     config.set('Model Parameters', 'n_layers', '4')
-    config.set('Model Parameters', 'z', '8')
+    config.set('Model Parameters', 'z', '16')
     config.set('Model Parameters', 'downsampling_factors', '4, 4, 4, 4')
     config.set('Model Parameters', 'num_conv_filters', '16, 16, 16, 32, 32')
     config.set('Model Parameters', 'polygon_order', '6, 6, 6, 6, 6')

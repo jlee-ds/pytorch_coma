@@ -131,7 +131,8 @@ def main(args):
     from datetime import datetime
     current_time = datetime.now().strftime('%b%d_%H-%M-%S')
     log_dir = os.path.join('runs/vae', current_time)
-    writer = SummaryWriter(log_dir, comment=None)
+    writer = SummaryWriter(log_dir+'_z16kw1')
+    print(coma.z)
 
     for epoch in range(start_epoch, total_epochs + 1):
         print("Training for epoch ", epoch)
@@ -174,7 +175,7 @@ def train(coma, train_loader, len_dataset, optimizer, device):
         out, mu, logvar = coma(data)
         loss = F.l1_loss(out, data.y)
         kld = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-        # kld /= coma.z
+        kld /= coma.z
         kld /= data.num_graphs
         recon_loss += data.num_graphs * loss.item()
         kld_loss += data.num_graphs * kld.item()
@@ -182,7 +183,7 @@ def train(coma, train_loader, len_dataset, optimizer, device):
             (1, data.num_graphs * coma.z)).detach().numpy()[0]]
         var_total = np.r_[var_total, torch.reshape(logvar.exp(),
             (1, data.num_graphs * coma.z)).detach().numpy()[0]]
-        loss = loss + 0.001 * kld
+        loss = loss + 1 * kld
         loss.backward()
         optimizer.step()
     return recon_loss / len_dataset, kld_loss / len_dataset, mu_total, var_total
