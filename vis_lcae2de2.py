@@ -7,9 +7,10 @@ from psbody.mesh import Mesh, MeshViewers
 import mesh_operations
 from config_parser import read_config
 from data import ComaDataset
-from model import Coma
+from model_cae2 import Coma
 from transform import Normalize
 import readchar
+from numpy import linalg as LA
 
 def scipy_to_torch_sparse(scp_matrix):
     values = scp_matrix.data
@@ -24,12 +25,12 @@ def scipy_to_torch_sparse(scp_matrix):
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Pytorch Trainer for Convolutional Mesh Autoencoders')
-    parser.add_argument('-c', '--conf', default='cfgs/ae.cfg', help='path of config file')
-    parser.add_argument('-s', '--split', default='clsf', help='split can be gnrt, clsf, or lgtd')
-    parser.add_argument('-st', '--split_term', default='clsf', help='split can be gnrt, clsf, or lgtd')
-    parser.add_argument('-d', '--data_dir', help='path where the downloaded data is stored')
+    parser.add_argument('-c', '--conf', default='cfgs/lcae2de2.cfg', help='path of config file')
+    parser.add_argument('-s', '--split', default='lgtdp', help='split can be gnrt, clsf, or lgtd')
+    parser.add_argument('-st', '--split_term', default='lgtdp', help='split can be gnrt, clsf, or lgtd')
+    parser.add_argument('-d', '--data_dir', default='ADNI2_data_lgtd', help='path where the downloaded data is stored')
     parser.add_argument('-cp', '--checkpoint_dir', help='path where checkpoints file need to be stored')
-    cols = 8
+    cols = 6
 
     args = parser.parse_args()
 
@@ -65,7 +66,7 @@ if __name__ == '__main__':
 
     normalize_transform = Normalize()
     dataset = ComaDataset(data_dir, dtype='test', split=args.split, split_term=args.split_term, pre_transform=normalize_transform)
-    data_loader = DataLoader(dataset, batch_size=1, shuffle=True, num_workers=1)
+    data_loader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=1)
 
     print('Loading model')
     coma = Coma(dataset, config, D_t, U_t, A_t, num_nodes)
@@ -77,23 +78,33 @@ if __name__ == '__main__':
         coma.load_state_dict(checkpoint['state_dict'])
     coma.to(device)
 
-    meshviewer = MeshViewers(shape=(2, cols))
+    meshviewer = MeshViewers(shape=(3, cols))
     coma.eval()
 
     exit = 0
     cnt = 0
     for i, data in enumerate(data_loader) :
+        print(data.period)
         data = data.to(device)
-        print(cnt, data.y)
+        # print(cnt, data.y)
         with torch.no_grad():
-            out = coma(data)
+            result_delta = coma(data)
+        out = result_delta + data.x
         save_out = out.detach().cpu().numpy()
-        expected_out = data.x.detach().cpu().numpy()
+        expected_out = data.y.detach().cpu().numpy()
+        base_input = data.x.detach().cpu().numpy()
         if dataset.pre_transform is not None :
             save_out = save_out*dataset.std.numpy()+dataset.mean.numpy()
-            expected_out = (data.x.detach().cpu().numpy())*dataset.std.numpy()+dataset.mean.numpy()
+            expected_out = (data.y.detach().cpu().numpy())*dataset.std.numpy()+dataset.mean.numpy()
+            base_input = base_input*dataset.std.numpy()+dataset.mean.numpy()
+        result_delta = LA.norm(save_out - base_input, ord=2, axis=1)
+        expected_delta = LA.norm(expected_out - base_input, ord=2, axis=1)
         result_mesh = Mesh(v=save_out, f=template_mesh.f)
         expected_mesh = Mesh(v=expected_out, f=template_mesh.f)
+        base_mesh = Mesh(v=base_input, f=template_mesh.f)
+        result_mesh.set_vertex_colors_from_weights(2*result_delta, scale_to_range_1=False, color=True)
+        expected_mesh.set_vertex_colors_from_weights(2*expected_delta, scale_to_range_1=False, color=True)
+        meshviewer[2][cnt].set_dynamic_meshes([base_mesh])
         meshviewer[1][cnt].set_dynamic_meshes([expected_mesh])
         meshviewer[0][cnt].set_dynamic_meshes([result_mesh])
         cnt += 1

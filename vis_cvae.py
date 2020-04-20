@@ -1,15 +1,17 @@
 import argparse
 import os
 import torch
+import torch.nn.functional as F
 import numpy as np
 from torch_geometric.data import DataLoader
 from psbody.mesh import Mesh, MeshViewers
 import mesh_operations
 from config_parser import read_config
 from data import ComaDataset
-from model import Coma
+from model_cvae import Coma
 from transform import Normalize
 import readchar
+from numpy import linalg as LA
 
 def scipy_to_torch_sparse(scp_matrix):
     values = scp_matrix.data
@@ -24,12 +26,12 @@ def scipy_to_torch_sparse(scp_matrix):
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Pytorch Trainer for Convolutional Mesh Autoencoders')
-    parser.add_argument('-c', '--conf', default='cfgs/ae.cfg', help='path of config file')
-    parser.add_argument('-s', '--split', default='clsf', help='split can be gnrt, clsf, or lgtd')
-    parser.add_argument('-st', '--split_term', default='clsf', help='split can be gnrt, clsf, or lgtd')
+    parser.add_argument('-c', '--conf', default='cfgs/cvae.cfg', help='path of config file')
+    parser.add_argument('-s', '--split', default='gnrt', help='split can be gnrt, clsf, or lgtd')
+    parser.add_argument('-st', '--split_term', default='gnrt', help='split can be gnrt, clsf, or lgtd')
     parser.add_argument('-d', '--data_dir', help='path where the downloaded data is stored')
     parser.add_argument('-cp', '--checkpoint_dir', help='path where checkpoints file need to be stored')
-    cols = 8
+    cols = 7
 
     args = parser.parse_args()
 
@@ -82,30 +84,52 @@ if __name__ == '__main__':
 
     exit = 0
     cnt = 0
-    for i, data in enumerate(data_loader) :
-        data = data.to(device)
-        print(cnt, data.y)
-        with torch.no_grad():
-            out = coma(data)
-        save_out = out.detach().cpu().numpy()
-        expected_out = data.x.detach().cpu().numpy()
-        if dataset.pre_transform is not None :
-            save_out = save_out*dataset.std.numpy()+dataset.mean.numpy()
-            expected_out = (data.x.detach().cpu().numpy())*dataset.std.numpy()+dataset.mean.numpy()
-        result_mesh = Mesh(v=save_out, f=template_mesh.f)
-        expected_mesh = Mesh(v=expected_out, f=template_mesh.f)
-        meshviewer[1][cnt].set_dynamic_meshes([expected_mesh])
-        meshviewer[0][cnt].set_dynamic_meshes([result_mesh])
-        cnt += 1
-        if cnt == 8 :
-            while(1) :
-                input_key = readchar.readchar()
-                if input_key == "\x1b":
-                    exit = 1
-                    break
-                elif input_key == "n" :
-                    cnt = 0
-                    break
+    mu = torch.zeros([1, coma.z])
+    logvar = torch.zeros([1, coma.z])
+    ad_cond = torch.Tensor([1, 0])
+    ad_cond = torch.reshape(ad_cond, (1,2))
+    cn_cond = torch.Tensor([0, 1])
+    cn_cond = torch.reshape(cn_cond, (1,2))
+    cond = [ad_cond, cn_cond]
+    std = torch.exp(0.5*logvar)
+    eps = np.asarray([-9, -6, -3, 0, 3, 6, 9])
+    while(1) :
+        for i, e in enumerate(eps) :
+            x = mu + e * std
+            cn_x = torch.cat((x, cn_cond), dim=1)
+            ad_x = torch.cat((x, ad_cond), dim=1)
+            with torch.no_grad():
+                cn_out = coma.decoder(cn_x)
+                ad_out = coma.decoder(ad_x)
+            #weights = F.l1_loss(cn_out, ad_out, reduction='none')
+            #weights = torch.mean(weights, dim=[0, 2])
+            #weights = torch.reshape(weights, (732, 3))
+            cn_save_out = cn_out.detach().cpu().numpy()[0]
+            cn_save_out = cn_save_out*dataset.std.numpy()+dataset.mean.numpy()
+            ad_save_out = ad_out.detach().cpu().numpy()[0]
+            ad_save_out = ad_save_out*dataset.std.numpy()+dataset.mean.numpy()
+            delta = LA.norm(ad_save_out - cn_save_out, ord=2, axis=1)
+            print(np.max(delta))
+            cn_result_mesh = Mesh(v=cn_save_out, f=template_mesh.f)
+            ad_result_mesh = Mesh(v=ad_save_out, f=template_mesh.f)
+            #weights = weights.detach().cpu().numpy()
+            ad_result_mesh.set_vertex_colors_from_weights(10*delta, scale_to_range_1=False, color=True)
+            meshviewer[0][i].set_dynamic_meshes([ad_result_mesh])
+            meshviewer[1][i].set_dynamic_meshes([cn_result_mesh])
+        while(1) :
+            input_key = readchar.readchar()
+            if input_key == "\x1b":
+                exit = 1
+                break
+            elif input_key == "u" :
+                eps = 1.1 * eps
+                break
+            elif input_key == "d" :
+                eps = 0.9 * eps
+                break
+            elif input_key == 'z' :
+                eps = np.asarray([-1.5, -1, -0.5, 0, 0.5, 1, 1.5])
+                break
         if exit :
             break
 

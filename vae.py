@@ -131,7 +131,7 @@ def main(args):
     from datetime import datetime
     current_time = datetime.now().strftime('%b%d_%H-%M-%S')
     log_dir = os.path.join('runs/vae', current_time)
-    writer = SummaryWriter(log_dir+'_z16kw1')
+    writer = SummaryWriter(log_dir+'_dp_z8kw1adlr0.002')
     print(coma.z)
 
     for epoch in range(start_epoch, total_epochs + 1):
@@ -146,10 +146,13 @@ def main(args):
         writer.add_histogram('hist/mean', mu, epoch)
         writer.add_histogram('hist/variance', var, epoch)
 
-        print('epoch ', epoch,' Train loss ', train_loss, ' Val loss ', val_loss)
+        print('epoch ', epoch,' Recon loss ', recon_loss, ' KLD loss ', kld_loss,' Val loss ', val_loss)
         if val_loss < best_val_loss:
             save_model(coma, optimizer, epoch, train_loss, val_loss, checkpoint_dir)
             best_val_loss = val_loss
+
+        if epoch == total_epochs or epoch % 100 == 0:
+            save_model(coma, optimizer, epoch, train_loss, val_loss, checkpoint_dir)
 
         val_loss_history.append(val_loss)
         val_losses.append(best_val_loss)
@@ -173,7 +176,7 @@ def train(coma, train_loader, len_dataset, optimizer, device):
         data = data.to(device)
         optimizer.zero_grad()
         out, mu, logvar = coma(data)
-        loss = F.l1_loss(out, data.y)
+        loss = F.l1_loss(out, data.x)
         kld = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
         kld /= coma.z
         kld /= data.num_graphs
@@ -197,13 +200,13 @@ def evaluate(coma, output_dir, test_loader, dataset, template_mesh, device, visu
         data = data.to(device)
         with torch.no_grad():
             out, _, _ = coma(data)
-        loss = F.l1_loss(out, data.y)
+        loss = F.l1_loss(out, data.x)
         total_loss += data.num_graphs * loss.item()
 
         if visualize and i % 100 == 0:
             save_out = out.detach().cpu().numpy()
             save_out = save_out*dataset.std.numpy()+dataset.mean.numpy()
-            expected_out = (data.y.detach().cpu().numpy())*dataset.std.numpy()+dataset.mean.numpy()
+            expected_out = (data.x.detach().cpu().numpy())*dataset.std.numpy()+dataset.mean.numpy()
             result_mesh = Mesh(v=save_out, f=template_mesh.f)
             expected_mesh = Mesh(v=expected_out, f=template_mesh.f)
             meshviewer[0][0].set_dynamic_meshes([result_mesh])

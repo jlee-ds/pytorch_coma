@@ -132,8 +132,8 @@ def main(args):
 
     from datetime import datetime
     current_time = datetime.now().strftime('%b%d_%H-%M-%S')
-    log_dir = os.path.join('runs/ae', current_time)
-    writer = SummaryWriter(log_dir+'-dp_adam')
+    log_dir = os.path.join('runs/laede', current_time)
+    writer = SummaryWriter(log_dir+'_lr0.1_wd0.0003_ds2')
 
     for epoch in range(start_epoch, total_epochs + 1):
         print("Training for epoch ", epoch)
@@ -169,7 +169,7 @@ def train(coma, train_loader, len_dataset, optimizer, device):
         data = data.to(device)
         optimizer.zero_grad()
         out = coma(data)
-        loss = F.l1_loss(out, data.x)
+        loss = F.l1_loss(out+data.x, data.y)
         total_loss += data.num_graphs * loss.item()
         loss.backward()
         optimizer.step()
@@ -179,24 +179,28 @@ def evaluate(coma, output_dir, test_loader, dataset, template_mesh, device, epoc
     coma.eval()
     total_loss = 0
     if visualize :
-        meshviewer = MeshViewers(shape=(1, 2))
+        meshviewer = MeshViewers(shape=(1, 3))
     for i, data in enumerate(test_loader):
         data = data.to(device)
         with torch.no_grad():
             out = coma(data)
-        loss = F.l1_loss(out, data.x)
+        loss = F.l1_loss(out+data.x, data.y)
         total_loss += data.num_graphs * loss.item()
 
         if visualize and i % 15 == 0 and i != 0:
-            save_out = out.detach().cpu().numpy()
-            expected_out = data.x.detach().cpu().numpy()
+            save_out = (out+data.x).detach().cpu().numpy()
+            base_input = data.x.detach().cpu().numpy()
+            expected_out = data.y.detach().cpu().numpy()
             if dataset.pre_transform is not None :
                 save_out = save_out*dataset.std.numpy()+dataset.mean.numpy()
                 expected_out = (data.x.detach().cpu().numpy())*dataset.std.numpy()+dataset.mean.numpy()
+                base_input = base_input*dataset.std.numpy()+dataset.mean.numpy()
             result_mesh = Mesh(v=save_out, f=template_mesh.f)
             expected_mesh = Mesh(v=expected_out, f=template_mesh.f)
-            meshviewer[0][0].set_dynamic_meshes([result_mesh])
+            base_mesh = Mesh(v=base_input, f=template_mesh.f)
+            meshviewer[0][0].set_dynamic_meshes([base_mesh])
             meshviewer[0][1].set_dynamic_meshes([expected_mesh])
+            meshviewer[0][2].set_dynamic_meshes([result_mesh])
             meshviewer[0][0].save_snapshot(os.path.join(output_dir, str(i)+'.png'), blocking=False)
 
     return total_loss/len(dataset)
@@ -206,12 +210,13 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Pytorch Trainer for Convolutional Mesh Autoencoders')
     parser.add_argument('-c', '--conf', help='path of config file')
-    parser.add_argument('-s', '--split', default='gnrt', help='split can be gnrt, clsf, or lgtd')
-    parser.add_argument('-st', '--split_term', default='gnrt', help='split can be gnrt, clsf, or lgtd')
+    parser.add_argument('-s', '--split', default='lgtd', help='split can be gnrt, clsf, or lgtd')
+    parser.add_argument('-st', '--split_term', default='lgtd', help='split can be gnrt, clsf, or lgtd')
     parser.add_argument('-d', '--data_dir', help='path where the downloaded data is stored')
     parser.add_argument('-cp', '--checkpoint_dir', help='path where checkpoints file need to be stored')
 
     args = parser.parse_args()
+    print(args)
 
     if args.conf is None:
         args.conf = os.path.join(os.path.dirname(__file__), 'default.cfg')

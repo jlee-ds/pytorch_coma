@@ -89,7 +89,6 @@ if __name__ == '__main__':
     while(1) :
         for i, e in enumerate(eps) :
             x = mu + e * std
-            print(i, x.size())
             with torch.no_grad():
                 out = coma.decoder(x)
             save_out = out.detach().cpu().numpy()
