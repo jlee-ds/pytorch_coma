@@ -8,7 +8,7 @@ from psbody.mesh import Mesh, MeshViewers
 import mesh_operations
 from config_parser import read_config
 from data import ComaDataset
-from model_cae2 import Coma
+from model_cae_vc import Coma
 from transform import Normalize
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
@@ -132,13 +132,12 @@ def main(args):
 
     from datetime import datetime
     current_time = datetime.now().strftime('%b%d_%H-%M-%S')
-    log_dir = os.path.join('runs/lcae2de2', current_time)
-    writer = SummaryWriter(log_dir+'_lr0.01_wd0.0003_ds2')
+    log_dir = os.path.join('runs/lcae_vc_de2', current_time)
+    writer = SummaryWriter(log_dir+'_lr0.08_wd0.0003_ds2')
 
     for epoch in range(start_epoch, total_epochs + 1):
         print("Training for epoch ", epoch)
         train_loss = train(coma, train_loader, len(dataset), optimizer, device)
-        #train_loss = train(coma, train_loader, len(dataset), optimizer, device)
         val_loss = evaluate(coma, output_dir, val_loader, dataset_val, template_mesh, device, epoch, visualize=visualize)
 
         writer.add_scalar('data/train_loss', train_loss, epoch)
@@ -210,9 +209,9 @@ def evaluate(coma, output_dir, test_loader, dataset, template_mesh, device, epoc
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Pytorch Trainer for Convolutional Mesh Autoencoders')
-    parser.add_argument('-c', '--conf', help='path of config file')
-    parser.add_argument('-s', '--split', default='lgtdp', help='split can be gnrt, clsf, or lgtd')
-    parser.add_argument('-st', '--split_term', default='lgtdp', help='split can be gnrt, clsf, or lgtd')
+    parser.add_argument('-c', '--conf', default='cfgs/lcae_vc_de2.cfg', help='path of config file')
+    parser.add_argument('-s', '--split', default='lgtdvc', help='split can be gnrt, clsf, or lgtd')
+    parser.add_argument('-st', '--split_term', default='lgtdvc', help='split can be gnrt, clsf, or lgtd')
     parser.add_argument('-d', '--data_dir', help='path where the downloaded data is stored')
     parser.add_argument('-cp', '--checkpoint_dir', help='path where checkpoints file need to be stored')
 

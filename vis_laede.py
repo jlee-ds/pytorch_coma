@@ -90,11 +90,6 @@ if __name__ == '__main__':
         with torch.no_grad():
             result_delta = coma(data)
         out = result_delta + data.x
-        #result_delta = torch.mean(result_delta, dim=[1])
-        #expected_delta = F.l1_loss(data.y, data.x, reduction='none')
-        #expected_delta = torch.mean(expected_delta, dim=[1])
-        #result_delta = result_delta.detach().cpu().numpy()
-        #expected_delta = expected_delta.detach().cpu().numpy()
         save_out = out.detach().cpu().numpy()
         expected_out = data.y.detach().cpu().numpy()
         base_input = data.x.detach().cpu().numpy()

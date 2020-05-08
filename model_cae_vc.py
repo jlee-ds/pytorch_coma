@@ -24,7 +24,7 @@ class Coma(torch.nn.Module):
         self.cheb_dec[-1].bias = None  # No bias for last convolution layer
         self.pool = Pool()
         self.enc_lin = torch.nn.Linear(self.downsample_matrices[-1].shape[0]*self.filters[-1], self.z)
-        self.dec_lin = torch.nn.Linear(self.z+3, self.filters[-1]*self.upsample_matrices[-1].shape[1])
+        self.dec_lin = torch.nn.Linear(self.z+2, self.filters[-1]*self.upsample_matrices[-1].shape[1])
         self.reset_parameters()
 
     def forward(self, data):
@@ -32,7 +32,7 @@ class Coma(torch.nn.Module):
         batch_size = data.num_graphs
         x = x.reshape(batch_size, -1, self.filters[0])
         x = self.encoder(x)
-        c = torch.reshape(data.period, (batch_size, 3))
+        c = torch.reshape(data.period, (batch_size, 2))
         x = torch.cat((x, c), dim=1)
         x = self.decoder(x)
         x = x.reshape(-1, self.filters[0])

@@ -7,11 +7,18 @@ from torch_geometric.data import DataLoader
 from psbody.mesh import Mesh, MeshViewers
 import mesh_operations
 from config_parser import read_config
-from data import ComaDataset
-from model_cae import Coma
-from transform import Normalize
+from data_clsf import ComaDataset
+from model_clsf import Coma
+from transform_clsf import Normalize
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
+import time
+import torch.backends.cudnn as cudnn
+import sklearn
+
+torch.manual_seed(1)
+cudnn.benchmark = False
+cudnn.deterministic = True
 
 def scipy_to_torch_sparse(scp_matrix):
     values = scp_matrix.data
@@ -92,10 +99,9 @@ def main(args):
 
     normalize_transform = Normalize()
     dataset = ComaDataset(data_dir, dtype='train', split=args.split, split_term=args.split_term, pre_transform=normalize_transform)
-    dataset_val = ComaDataset(data_dir, dtype='val', split=args.split, split_term=args.split_term, pre_transform=normalize_transform)
     dataset_test = ComaDataset(data_dir, dtype='test', split=args.split, split_term=args.split_term, pre_transform=normalize_transform)
     train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=workers_thread)
-    val_loader = DataLoader(dataset_val, batch_size=1, shuffle=True, num_workers=workers_thread)
+    val_loader = DataLoader(dataset_test, batch_size=1, shuffle=True, num_workers=workers_thread)
     test_loader = DataLoader(dataset_test, batch_size=1, shuffle=False, num_workers=workers_thread)
 
     print('Loading model')
@@ -129,25 +135,36 @@ def main(args):
 
     best_val_loss = float('inf')
     val_loss_history = []
+    best_val_acc = float('inf')
 
     from datetime import datetime
     current_time = datetime.now().strftime('%b%d_%H-%M-%S')
-    log_dir = os.path.join('runs/lcaede2', current_time)
-    writer = SummaryWriter(log_dir+'_lr0.08_wd0.0003_ds2')
+    log_dir = os.path.join('runs/clsf', current_time)
+    writer = SummaryWriter(log_dir+'raw_ds2_e300')
+
+    t = time.time()
+    num_total_params = sum(p.numel() for p in coma.parameters())
+    num_trainable_params = sum(p.numel() for p in coma.parameters() if p.requires_grad)
+    print('Number of total paramters: {}, number of trainable parameters: {}'\
+        .format(num_total_params, num_trainable_params))
 
     for epoch in range(start_epoch, total_epochs + 1):
         print("Training for epoch ", epoch)
-        train_loss = train(coma, train_loader, len(dataset), optimizer, device)
-        train_loss = train(coma, train_loader, len(dataset), optimizer, device)
-        val_loss = evaluate(coma, output_dir, val_loader, dataset_val, template_mesh, device, epoch, visualize=visualize)
+        train_loss, train_acc = train(coma, train_loader, len(dataset), optimizer, device)
+        val_loss, val_acc, clsf_rpt = evaluate(coma, output_dir, val_loader, dataset_test, template_mesh, device, epoch, visualize=visualize)
 
         writer.add_scalar('data/train_loss', train_loss, epoch)
-        writer.add_scalar('data/val_loss', val_loss, epoch)
+        writer.add_scalar('data/test_loss', val_loss, epoch)
+        writer.add_scalar('data/train_acc', train_acc, epoch)
+        writer.add_scalar('data/test_acc', val_acc, epoch)
 
         print('epoch ', epoch,' Train loss ', train_loss, ' Val loss ', val_loss)
-        if val_loss < best_val_loss:
+        print(' Train acc ', train_acc, ' Val acc ', val_acc)
+        print(clsf_rpt)
+        #if val_loss < best_val_loss:
+        if val_acc < best_val_acc :
             save_model(coma, optimizer, epoch, train_loss, val_loss, checkpoint_dir)
-            best_val_loss = val_loss
+            best_val_acc = val_acc
 
         if epoch == total_epochs or epoch % 100 == 0:
             save_model(coma, optimizer, epoch, train_loss, val_loss, checkpoint_dir)
@@ -158,6 +175,11 @@ def main(args):
         if opt=='sgd':
             adjust_learning_rate(optimizer, lr_decay)
 
+    t_duration = time.time() - t
+    print('total time : {:.3f}s'.format(t_duration))
+    print('Number of paramters: {}'\
+        .format(num_total_params))
+
     if torch.cuda.is_available():
         torch.cuda.synchronize()
 
@@ -166,58 +188,55 @@ def main(args):
 def train(coma, train_loader, len_dataset, optimizer, device):
     coma.train()
     total_loss = 0
+    crt = 0
     for data in tqdm(train_loader):
         data = data.to(device)
         optimizer.zero_grad()
         out = coma(data)
-        loss = F.l1_loss(out, data.y-data.x)
+        y = torch.reshape(data.y, (data.num_graphs, 2))
+        y = torch.argmax(y, 1)
+        #print(out, out.data.max(1)[1])
+        loss = F.cross_entropy(out, y)
+        crt += y.eq(out.data.max(1)[1]).sum().item()
+        #print(crt)
         total_loss += data.num_graphs * loss.item()
         loss.backward()
         optimizer.step()
-    return total_loss / len_dataset
+    return total_loss / len_dataset, crt / len_dataset
 
 def evaluate(coma, output_dir, test_loader, dataset, template_mesh, device, epoch, visualize=False):
     coma.eval()
     total_loss = 0
-    if visualize :
-        meshviewer = MeshViewers(shape=(1, 3))
+    crt = 0
+    preds = []
+    labels = []
     for i, data in enumerate(test_loader):
         data = data.to(device)
         with torch.no_grad():
             out = coma(data)
-        loss = F.l1_loss(out, data.y-data.x)
+        y = torch.reshape(data.y, (data.num_graphs, 2))
+        y = torch.argmax(y, 1)
+        loss = F.cross_entropy(out, y)
+        crt += y.eq(out.data.max(1)[1]).sum().item()
+        preds.append(out.data.max(1)[1].detach().cpu().numpy())
+        labels.append(y.detach().cpu().numpy())
         total_loss += data.num_graphs * loss.item()
 
-        if visualize and i % 15 == 0 and i != 0:
-            save_out = (out+data.x).detach().cpu().numpy()
-            base_input = data.x.detach().cpu().numpy()
-            expected_out = data.y.detach().cpu().numpy()
-            if dataset.pre_transform is not None :
-                save_out = save_out*dataset.std.numpy()+dataset.mean.numpy()
-                expected_out = (data.x.detach().cpu().numpy())*dataset.std.numpy()+dataset.mean.numpy()
-                base_input = base_input*dataset.std.numpy()+dataset.mean.numpy()
-            result_mesh = Mesh(v=save_out, f=template_mesh.f)
-            expected_mesh = Mesh(v=expected_out, f=template_mesh.f)
-            base_mesh = Mesh(v=base_input, f=template_mesh.f)
-            meshviewer[0][0].set_dynamic_meshes([base_mesh])
-            meshviewer[0][1].set_dynamic_meshes([expected_mesh])
-            meshviewer[0][2].set_dynamic_meshes([result_mesh])
-            meshviewer[0][0].save_snapshot(os.path.join(output_dir, str(i)+'.png'), blocking=False)
-
-    return total_loss/len(dataset)
+    clsf_rpt = sklearn.metrics.classification_report(np.concatenate(labels, axis=None), \
+        np.concatenate(preds, axis=None))
+    return total_loss/len(dataset), crt/len(dataset), clsf_rpt
 
 
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Pytorch Trainer for Convolutional Mesh Autoencoders')
-    parser.add_argument('-c', '--conf', help='path of config file')
-    parser.add_argument('-s', '--split', default='lgtdc', help='split can be gnrt, clsf, or lgtd')
-    parser.add_argument('-st', '--split_term', default='lgtdc', help='split can be gnrt, clsf, or lgtd')
-    parser.add_argument('-d', '--data_dir', help='path where the downloaded data is stored')
+    parser.add_argument('-c', '--conf', default='cfgs/clsf.cfg', help='path of config file')
+    parser.add_argument('-s', '--split', default='clsfb', help='split can be gnrt, clsf, or lgtd')
+    parser.add_argument('-st', '--split_term', default='clsfb', help='split can be gnrt, clsf, or lgtd')
+    parser.add_argument('-d', '--data_dir', default='data/ADNI2_data', help='path where the downloaded data is stored')
     parser.add_argument('-cp', '--checkpoint_dir', help='path where checkpoints file need to be stored')
 
     args = parser.parse_args()
-    print(args)
 
     if args.conf is None:
         args.conf = os.path.join(os.path.dirname(__file__), 'default.cfg')

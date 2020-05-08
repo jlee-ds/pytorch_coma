@@ -79,7 +79,11 @@ if __name__ == '__main__':
         coma.load_state_dict(checkpoint['state_dict'])
     coma.to(device)
 
-    meshviewer = MeshViewers(shape=(2, cols))
+    meshviewer = MeshViewers(shape=(3, cols))
+    for row in meshviewer :
+        for window in row :
+            window.set_background_color(np.asarray([1.0, 1.0, 1.0]))
+    coma.eval()
     coma.eval()
 
     exit = 0
@@ -94,6 +98,13 @@ if __name__ == '__main__':
     std = torch.exp(0.5*logvar)
     eps = np.asarray([-9, -6, -3, 0, 3, 6, 9])
     while(1) :
+        with torch.no_grad():
+            cn_zero_out = coma.decoder(torch.cat((mu + eps[3] * std, cn_cond), dim=1))
+            ad_zero_out = coma.decoder(torch.cat((mu + eps[3] * std, ad_cond), dim=1))
+        cn_zero_out = cn_zero_out[0].detach().cpu().numpy()
+        cn_zero_out = cn_zero_out*dataset.std.numpy()+dataset.mean.numpy()
+        ad_zero_out = ad_zero_out[0].detach().cpu().numpy()
+        ad_zero_out = ad_zero_out*dataset.std.numpy()+dataset.mean.numpy()
         for i, e in enumerate(eps) :
             x = mu + e * std
             cn_x = torch.cat((x, cn_cond), dim=1)
@@ -108,14 +119,20 @@ if __name__ == '__main__':
             cn_save_out = cn_save_out*dataset.std.numpy()+dataset.mean.numpy()
             ad_save_out = ad_out.detach().cpu().numpy()[0]
             ad_save_out = ad_save_out*dataset.std.numpy()+dataset.mean.numpy()
-            delta = LA.norm(ad_save_out - cn_save_out, ord=2, axis=1)
-            print(np.max(delta))
+            ad_delta = LA.norm(ad_save_out - ad_zero_out, ord=2, axis=1)
+            cn_delta = LA.norm(cn_save_out - cn_zero_out, ord=2, axis=1)
+            mse_delta = LA.norm(ad_save_out - cn_save_out, ord=2, axis=1)
             cn_result_mesh = Mesh(v=cn_save_out, f=template_mesh.f)
             ad_result_mesh = Mesh(v=ad_save_out, f=template_mesh.f)
+            ad_mse_mesh = Mesh(v=ad_save_out, f=template_mesh.f)
             #weights = weights.detach().cpu().numpy()
-            ad_result_mesh.set_vertex_colors_from_weights(10*delta, scale_to_range_1=False, color=True)
-            meshviewer[0][i].set_dynamic_meshes([ad_result_mesh])
-            meshviewer[1][i].set_dynamic_meshes([cn_result_mesh])
+            if e != 0 :
+                ad_result_mesh.set_vertex_colors_from_weights(10*ad_delta, scale_to_range_1=False, color=True)
+                cn_result_mesh.set_vertex_colors_from_weights(10*cn_delta, scale_to_range_1=False, color=True)
+            ad_mse_mesh.set_vertex_colors_from_weights(10*mse_delta, scale_to_range_1=False, color=True)
+            meshviewer[0][i].set_dynamic_meshes([ad_mse_mesh])
+            meshviewer[1][i].set_dynamic_meshes([ad_result_mesh])
+            meshviewer[2][i].set_dynamic_meshes([cn_result_mesh])
         while(1) :
             input_key = readchar.readchar()
             if input_key == "\x1b":

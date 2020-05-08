@@ -10,6 +10,7 @@ from data import ComaDataset
 from model import Coma
 from transform import Normalize
 import readchar
+from numpy import linalg as LA
 
 def scipy_to_torch_sparse(scp_matrix):
     values = scp_matrix.data
@@ -25,8 +26,8 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Pytorch Trainer for Convolutional Mesh Autoencoders')
     parser.add_argument('-c', '--conf', default='cfgs/ae.cfg', help='path of config file')
-    parser.add_argument('-s', '--split', default='clsf', help='split can be gnrt, clsf, or lgtd')
-    parser.add_argument('-st', '--split_term', default='clsf', help='split can be gnrt, clsf, or lgtd')
+    parser.add_argument('-s', '--split', default='gnrtdx', help='split can be gnrt, clsf, or lgtd')
+    parser.add_argument('-st', '--split_term', default='gnrtdxb', help='split can be gnrt, clsf, or lgtd')
     parser.add_argument('-d', '--data_dir', help='path where the downloaded data is stored')
     parser.add_argument('-cp', '--checkpoint_dir', help='path where checkpoints file need to be stored')
     cols = 8
@@ -65,7 +66,7 @@ if __name__ == '__main__':
 
     normalize_transform = Normalize()
     dataset = ComaDataset(data_dir, dtype='test', split=args.split, split_term=args.split_term, pre_transform=normalize_transform)
-    data_loader = DataLoader(dataset, batch_size=1, shuffle=True, num_workers=1)
+    data_loader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=1)
 
     print('Loading model')
     coma = Coma(dataset, config, D_t, U_t, A_t, num_nodes)
@@ -77,7 +78,10 @@ if __name__ == '__main__':
         coma.load_state_dict(checkpoint['state_dict'])
     coma.to(device)
 
-    meshviewer = MeshViewers(shape=(2, cols))
+    meshviewer = MeshViewers(shape=(3, cols))
+    for row in meshviewer :
+        for window in row :
+            window.set_background_color(np.asarray([1.0, 1.0, 1.0]))
     coma.eval()
 
     exit = 0
@@ -92,10 +96,16 @@ if __name__ == '__main__':
         if dataset.pre_transform is not None :
             save_out = save_out*dataset.std.numpy()+dataset.mean.numpy()
             expected_out = (data.x.detach().cpu().numpy())*dataset.std.numpy()+dataset.mean.numpy()
+
+        result_delta = LA.norm(expected_out - save_out, ord=2, axis=1)
+        delta_mesh = Mesh(v=save_out, f=template_mesh.f)
         result_mesh = Mesh(v=save_out, f=template_mesh.f)
         expected_mesh = Mesh(v=expected_out, f=template_mesh.f)
-        meshviewer[1][cnt].set_dynamic_meshes([expected_mesh])
-        meshviewer[0][cnt].set_dynamic_meshes([result_mesh])
+
+        delta_mesh.set_vertex_colors_from_weights(result_delta*10, scale_to_range_1=False, color=True)
+        meshviewer[2][cnt].set_dynamic_meshes([expected_mesh])
+        meshviewer[1][cnt].set_dynamic_meshes([result_mesh])
+        meshviewer[0][cnt].set_dynamic_meshes([delta_mesh])
         cnt += 1
         if cnt == 8 :
             while(1) :

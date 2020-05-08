@@ -10,6 +10,7 @@ from data import ComaDataset
 from model_vae import Coma
 from transform import Normalize
 import readchar
+from numpy import linalg as LA
 
 def scipy_to_torch_sparse(scp_matrix):
     values = scp_matrix.data
@@ -78,6 +79,9 @@ if __name__ == '__main__':
     coma.to(device)
 
     meshviewer = MeshViewers(shape=(1, cols))
+    for row in meshviewer :
+        for window in row :
+            window.set_background_color(np.asarray([1.0, 1.0, 1.0]))
     coma.eval()
 
     exit = 0
@@ -86,14 +90,22 @@ if __name__ == '__main__':
     logvar = torch.zeros([1, coma.z])
     std = torch.exp(0.5*logvar)
     eps = np.asarray([-1.5, -1, -0.5, 0, 0.5, 1, 1.5])
+    #eps = np.asarray([-24, -16, -8, 0, 8, 16, 24])
     while(1) :
+        with torch.no_grad():
+            out = coma.decoder(mu + eps[3] * std)
+        zero_out = out[0].detach().cpu().numpy()
+        zero_out = zero_out*dataset.std.numpy()+dataset.mean.numpy()
         for i, e in enumerate(eps) :
             x = mu + e * std
             with torch.no_grad():
                 out = coma.decoder(x)
-            save_out = out.detach().cpu().numpy()
+            save_out = out[0].detach().cpu().numpy()
             save_out = save_out*dataset.std.numpy()+dataset.mean.numpy()
             result_mesh = Mesh(v=save_out, f=template_mesh.f)
+            if e != 0 :
+                result_delta = LA.norm(zero_out - save_out, ord=2, axis=1)
+                result_mesh.set_vertex_colors_from_weights(result_delta*5, scale_to_range_1=False, color=True)
             meshviewer[0][i].set_dynamic_meshes([result_mesh])
         while(1) :
             input_key = readchar.readchar()

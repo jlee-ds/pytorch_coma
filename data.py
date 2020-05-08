@@ -52,7 +52,7 @@ class ComaDataset(InMemoryDataset):
 
     def gather_paths(self, split):
         datapaths = dict()
-        if split == 'clsf' or split == 'gnrt' :
+        if split == 'gnrtdx' or split == 'gnrt' :
             datapaths['ad'] = []
             datapaths['cn'] = []
             ad_ids = pd.read_csv('/Users/jlee/Desktop/JONG/tum/thesis/data/adni2/AD_PTID_IMGID.csv')
@@ -61,12 +61,14 @@ class ComaDataset(InMemoryDataset):
             cn_ids = pd.read_csv('/Users/jlee/Desktop/JONG/tum/thesis/data/adni2/CN_PTID_IMGID.csv')
             cn_ids = cn_ids['mesh_filename']
             cn_ids = [i.split('_')[0] for i in cn_ids]
+
             for i in ad_ids :
                 datapaths['ad'].append(self.root_dir+'/'+i+'-L_Hipp_first.obj')
             for n, i in enumerate(cn_ids) :
-                if self.split_term == 'clsfb' and n >= len(ad_ids) :
+                if self.split_term == 'gnrtdxb' and n >= len(ad_ids) :
                     break
                 datapaths['cn'].append(self.root_dir+'/'+i+'-L_Hipp_first.obj')
+            print('AD ', len(datapaths['ad']), ', CN ', len(datapaths['cn']))
         elif split == 'lgtd' :
             print('lgtd dataset file paths...')
             datapaths['lgtd'] = []
@@ -78,16 +80,17 @@ class ComaDataset(InMemoryDataset):
                 bl_path = self.root_dir+'/'+str(blm24['bl'])+'-L_Hipp_first.obj'
                 m24_path = self.root_dir+'/'+str(blm24['m24'])+'-L_Hipp_first.obj'
                 datapaths['lgtd'].append([bl_path, m24_path])
-        elif split == 'lgtdc' :
+        elif split == 'lgtddxb' :
             print('lgtdc dataset file paths...')
             ad_count, cn_count = 0, 0;
-            datapaths['lgtdc'] = []
+            datapaths['lgtddx'] = []
             bl_m24_ids = pd.read_csv('/Users/jlee/Desktop/JONG/tum/thesis/data/adni2/bl_m24_imgid.csv')
             adni_info = pd.read_csv('/Users/jlee/Desktop/JONG/tum/thesis/data/adni2/adni_info.csv')
             bl_ids = bl_m24_ids['bl']; m24_ids = bl_m24_ids['m24'];
 
             for i in range(len(bl_m24_ids)):
                 blm24 = bl_m24_ids.loc[i]
+                # for lgtddxf, change 'bl' to 'm24' in the below code line.
                 bl_DX = adni_info[adni_info['ImageUID'] == blm24['bl']].iloc[0]['DX']
                 #print(bl_DX)
                 if bl_DX in ['CN', 'Dementia'] :
@@ -97,14 +100,36 @@ class ComaDataset(InMemoryDataset):
                         bl_class = [0, 1];  cn_count += 1
                     elif bl_DX == 'Dementia' :
                         bl_class = [1, 0];  ad_count += 1
-                    datapaths['lgtdc'].append([bl_path, m24_path, bl_class])
+                    datapaths['lgtddx'].append([bl_path, m24_path, bl_class])
             print('length of dataset is %d'%(ad_count+cn_count))
             print(ad_count, cn_count)
-        elif split == 'lgtdp' :
-            print('lgtdp dataset file paths...')
+        elif split == 'lgtddxf' :
+            print('lgtdc dataset file paths...')
+            ad_count, cn_count = 0, 0;
+            datapaths['lgtddx'] = []
+            bl_m24_ids = pd.read_csv('/Users/jlee/Desktop/JONG/tum/thesis/data/adni2/bl_m24_imgid.csv')
+            adni_info = pd.read_csv('/Users/jlee/Desktop/JONG/tum/thesis/data/adni2/adni_info.csv')
+            bl_ids = bl_m24_ids['bl']; m24_ids = bl_m24_ids['m24'];
+
+            for i in range(len(bl_m24_ids)):
+                blm24 = bl_m24_ids.loc[i]
+                m24_DX = adni_info[adni_info['ImageUID'] == blm24['m24']].iloc[0]['DX']
+                #print(bl_DX)
+                if m24_DX in ['CN', 'Dementia'] :
+                    bl_path = self.root_dir+'/'+str(blm24['bl'])+'-L_Hipp_first.obj'
+                    m24_path = self.root_dir+'/'+str(blm24['m24'])+'-L_Hipp_first.obj'
+                    if m24_DX == 'CN' :
+                        m24_class = [0, 1];  cn_count += 1
+                    elif m24_DX == 'Dementia' :
+                        m24_class = [1, 0];  ad_count += 1
+                    datapaths['lgtddx'].append([bl_path, m24_path, m24_class])
+            print('length of dataset is %d'%(ad_count+cn_count))
+            print(ad_count, cn_count)
+        elif split == 'lgtdvc' :
+            print('lgtdvc dataset file paths...')
             ad_count, cn_count = 0, 0;
             bl_count, m12_count, m24_count = 0, 0, 0;
-            datapaths['lgtdp'] = []
+            datapaths['lgtdvc'] = []
             imgids = pd.read_csv('/Users/jlee/Desktop/JONG/tum/thesis/data/adni2/blm12m24_imgids.csv')
             adni_info = pd.read_csv('/Users/jlee/Desktop/JONG/tum/thesis/data/adni2/adni_info.csv')
             for i in range(len(imgids)):
@@ -112,27 +137,30 @@ class ComaDataset(InMemoryDataset):
                 #print(imgid, type(imgid))
                 if i % 3 == 0 : # BL
                     bl_count += 1
-                    period = [1, 0, 0]
+                    # period = [1, 0, 0]
                     bl_path = self.root_dir+'/'+str(imgid)+'-L_Hipp_first.obj'
                     bl_DX = adni_info[adni_info['ImageUID'] == imgid].iloc[0]['DX']
                     if bl_DX == 'CN' :
                         bl_class = [0, 1];  cn_count += 1
                     elif bl_DX == 'Dementia' :
                         bl_class = [1, 0];  ad_count += 1
-                    datapaths['lgtdp'].append([bl_path, bl_path, bl_class, period])
+                    # datapaths['lgtdp'].append([bl_path, bl_path, bl_class, period])
                 elif i % 3 == 1 : # M12
                     m12_count += 1
-                    period = [0, 1, 0]
+                    period = [1, 0]
                     m12_path = self.root_dir+'/'+str(imgid)+'-L_Hipp_first.obj'
-                    datapaths['lgtdp'].append([bl_path, m12_path, bl_class, period])
+                    #print([bl_path, m12_path, bl_class, period])
+                    datapaths['lgtdvc'].append([bl_path, m12_path, bl_class, period])
                 elif i % 3 == 2 : # M24
                     m24_count += 1
-                    period = [0, 0, 1]
+                    period = [0, 1]
                     m24_path = self.root_dir+'/'+str(imgid)+'-L_Hipp_first.obj'
-                    datapaths['lgtdp'].append([bl_path, m24_path, bl_class, period])
-            print('length of dataset is %d'%((ad_count+cn_count)*3))
+                    #print([bl_path, m24_path, bl_class, period])
+                    datapaths['lgtdvc'].append([bl_path, m24_path, bl_class, period])
+            #print('length of dataset is %d'%((ad_count+cn_count)*3))
             print(bl_count + m12_count + m24_count)
-            print(ad_count, cn_count)
+            print(bl_count, m12_count, m24_count)
+            #print(ad_count, cn_count)
 
         return datapaths
 
@@ -148,7 +176,7 @@ class ComaDataset(InMemoryDataset):
                     edge_index = torch.Tensor(np.vstack((adjacency.row, adjacency.col)))
                     mesh_m24 = Mesh(filename=data_file[1])
                     data = Data(x=mesh_verts, y=torch.Tensor(mesh_m24.v), edge_index=edge_index)
-                elif key == 'lgtdc' :
+                elif key == 'lgtddx' :
                     mesh = Mesh(filename=data_file[0])
                     mesh_verts = torch.Tensor(mesh.v)
                     adjacency = get_vert_connectivity(mesh.v, mesh.f).tocoo()
@@ -156,7 +184,8 @@ class ComaDataset(InMemoryDataset):
                     mesh_m24 = Mesh(filename=data_file[1])
                     data = Data(x=mesh_verts, y=torch.Tensor(mesh_m24.v), edge_index=edge_index,
                         label=torch.Tensor(data_file[2]))
-                elif key == 'lgtdp' :
+                elif key == 'lgtdvc' :
+                    #print(data_file)
                     mesh = Mesh(filename=data_file[0])
                     mesh_verts = torch.Tensor(mesh.v)
                     adjacency = get_vert_connectivity(mesh.v, mesh.f).tocoo()
@@ -174,13 +203,15 @@ class ComaDataset(InMemoryDataset):
                     elif key == 'cn' :
                         data = Data(x=mesh_verts, y=torch.Tensor([0,1]), edge_index=edge_index)
 
-                if idx % 100 <= 10:
+                if idx % 100 < 10:
                     test_data.append(data)
-                elif idx % 100 <= 20:
+                    #print(data.period)
+                elif idx % 100 < 20:
                     val_data.append(data)
                 else:
                     train_data.append(data)
                     train_vertices.append(mesh.v)
+        print(len(train_data), len(val_data), len(test_data))
 
         mean_train = torch.Tensor(np.mean(train_vertices, axis=0))
         std_train = torch.Tensor(np.std(train_vertices, axis=0))
@@ -203,23 +234,26 @@ class ComaDataset(InMemoryDataset):
 def prepare_gnrt_dataset(path):
     ComaDataset(path, split='gnrt', split_term='gnrt', pre_transform=Normalize())
 
-def prepare_clsf_dataset(path):
-    ComaDataset(path, split='clsf', split_term='clsfb', pre_transform=Normalize())
+def prepare_gnrtdx_dataset(path):
+    ComaDataset(path, split='gnrtdx', split_term='gnrtdxb', pre_transform=Normalize())
 
 def prepare_lgtd_dataset(path):
     ComaDataset(path, split='lgtd', split_term='lgtd', pre_transform=Normalize())
 
-def prepare_lgtdc_dataset(path):
-    ComaDataset(path, split='lgtdc', split_term='lgtdc', pre_transform=Normalize())
+def prepare_lgtddxb_dataset(path):
+    ComaDataset(path, split='lgtddxb', split_term='lgtddxb', pre_transform=Normalize())
 
-def prepare_lgtdp_dataset(path):
-    ComaDataset(path, split='lgtdp', split_term='lgtdp', pre_transform=Normalize())
+def prepare_lgtddxf_dataset(path):
+    ComaDataset(path, split='lgtddxf', split_term='lgtddxf', pre_transform=Normalize())
+
+def prepare_lgtdvc_dataset(path):
+    ComaDataset(path, split='lgtdvc', split_term='lgtdvc', pre_transform=Normalize())
 
 
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='ADNI2 Data preparation for Convolutional Mesh Autoencoders')
-    parser.add_argument('-s', '--split', default='gnrt', help='split can be gnrt, clsf, lgtd, lgtdp, or lgtdc')
+    parser.add_argument('-s', '--split', default='gnrt', help='split can be gnrt, clsf, lgtd, lgtdvc, or lgtddx')
     parser.add_argument('-d', '--data_dir', help='path where the downloaded data is stored')
 
     args = parser.parse_args()
@@ -227,14 +261,16 @@ if __name__ == '__main__':
     data_dir = args.data_dir
     if split == 'gnrt':
         prepare_gnrt_dataset(data_dir)
-    elif split == 'clsf':
-        prepare_clsf_dataset(data_dir)
+    elif split == 'gnrtdx':
+        prepare_gnrtdx_dataset(data_dir)
     elif split == 'lgtd':
         prepare_lgtd_dataset(data_dir)
-    elif split == 'lgtdc':
-        prepare_lgtdc_dataset(data_dir)
-    elif split == 'lgtdp':
-        prepare_lgtdp_dataset(data_dir)
+    elif split == 'lgtddxb':
+        prepare_lgtddxb_dataset(data_dir)
+    elif split == 'lgtddxf':
+        prepare_lgtddxf_dataset(data_dir)
+    elif split == 'lgtdvc':
+        prepare_lgtdvc_dataset(data_dir)
     else:
         raise Exception("Only gnrt, clsf, and lgtd split are supported")
 
