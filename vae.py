@@ -59,7 +59,7 @@ def main(args):
         print('No visual output directory is provided. Checkpoint directory will be used to store the visual results')
         output_dir = checkpoint_dir
 
-    if not output_dir and not os.path.exists(output_dir):
+    if output_dir and not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
     eval_flag = config['eval']
@@ -131,7 +131,7 @@ def main(args):
     from datetime import datetime
     current_time = datetime.now().strftime('%b%d_%H-%M-%S')
     log_dir = os.path.join('runs/vae', current_time)
-    writer = SummaryWriter(log_dir+'_dp_z8kw1adlr0.002')
+    writer = SummaryWriter(log_dir+'_dxb_lr0.04_z2')
     print(coma.z)
 
     for epoch in range(start_epoch, total_epochs + 1):
@@ -219,9 +219,9 @@ def evaluate(coma, output_dir, test_loader, dataset, template_mesh, device, visu
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Pytorch Trainer for Convolutional Mesh Autoencoders')
-    parser.add_argument('-c', '--conf', help='path of config file')
-    parser.add_argument('-s', '--split', default='gnrt', help='split can be gnrt, clsf, or lgtd')
-    parser.add_argument('-st', '--split_term', default='gnrt', help='split can be gnrt, clsf, or lgtd')
+    parser.add_argument('-c', '--conf', default='cfgs/vae.cfg', help='path of config file')
+    parser.add_argument('-s', '--split', default='gnrtdx', help='split can be gnrt, clsf, or lgtd')
+    parser.add_argument('-st', '--split_term', default='gnrtdxb', help='split can be gnrt, clsf, or lgtd')
     parser.add_argument('-d', '--data_dir', help='path where the downloaded data is stored')
     parser.add_argument('-cp', '--checkpoint_dir', help='path where checkpoints file need to be stored')
 

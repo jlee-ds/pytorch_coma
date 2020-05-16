@@ -52,7 +52,11 @@ class ComaDataset(InMemoryDataset):
 
     def gather_paths(self, split):
         datapaths = dict()
-        if split == 'gnrtdx' or split == 'gnrt' :
+        if split == 'gnrt' :
+            datapaths['all'] = []
+            obj_list = glob(os.path.join(self.root_dir, '*.obj'))
+            datapaths['all'] = datapaths['all'] + obj_list
+        elif split == 'gnrtdx' :
             datapaths['ad'] = []
             datapaths['cn'] = []
             ad_ids = pd.read_csv('/Users/jlee/Desktop/JONG/tum/thesis/data/adni2/AD_PTID_IMGID.csv')

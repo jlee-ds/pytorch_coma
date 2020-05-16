@@ -12,6 +12,12 @@ from model import Coma
 from transform import Normalize
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
+import torch.backends.cudnn as cudnn
+
+torch.manual_seed(1)
+cudnn.benchmark = False
+cudnn.deterministic = True
+
 
 def scipy_to_torch_sparse(scp_matrix):
     values = scp_matrix.data
@@ -132,12 +138,13 @@ def main(args):
 
     from datetime import datetime
     current_time = datetime.now().strftime('%b%d_%H-%M-%S')
-    log_dir = os.path.join('runs/laede2', current_time)
-    writer = SummaryWriter(log_dir+'_lr0.08_wd0.0003_lyr2')
+    log_dir = os.path.join('runs/lae_vc_de2', current_time)
+    writer = SummaryWriter(log_dir+'-lr0.08_wd0.0003_ds2')
 
     for epoch in range(start_epoch, total_epochs + 1):
         print("Training for epoch ", epoch)
         train_loss = train(coma, train_loader, len(dataset), optimizer, device)
+        #train_loss = train(coma, train_loader, len(dataset), optimizer, device)
         val_loss = evaluate(coma, output_dir, val_loader, dataset_val, template_mesh, device, epoch, visualize=visualize)
 
         writer.add_scalar('data/train_loss', train_loss, epoch)

@@ -13,8 +13,8 @@ from transform_clsf import Normalize
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 import time
-import torch.backends.cudnn as cudnn
 import sklearn
+import torch.backends.cudnn as cudnn
 
 torch.manual_seed(1)
 cudnn.benchmark = False
