@@ -19,6 +19,7 @@ import torch.backends.cudnn as cudnn
 torch.manual_seed(1)
 cudnn.benchmark = False
 cudnn.deterministic = True
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 def scipy_to_torch_sparse(scp_matrix):
     values = scp_matrix.data
@@ -126,7 +127,7 @@ def main(args):
             for k, v in state.items():
                 if isinstance(v, torch.Tensor):
                     state[k] = v.to(device)
-    coma.to(device)
+    coma.cuda()
 
     if eval_flag:
         val_loss = evaluate(coma, output_dir, test_loader, dataset_test, template_mesh, device, visualize)
