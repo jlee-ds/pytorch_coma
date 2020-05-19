@@ -1,5 +1,7 @@
 import argparse
-import glob
+from glob import glob
+import os
+import os.path as osp
 import numpy as np
 import pandas as pd
 import torch
@@ -19,6 +21,8 @@ class ComaDataset(InMemoryDataset):
         self.transform = transform
         self.pre_tranform = pre_transform
         # Downloaded data is present in following format root_dir/*/*/*.py
+        if not osp.exists(osp.join(root_dir, 'processed', self.split_term)):
+            os.makedirs(osp.join(root_dir, 'processed', self.split_term))
         self.data_file = self.gather_paths(self.split)
         super(ComaDataset, self).__init__(root_dir, transform, pre_transform)
         if dtype == 'train':
@@ -47,14 +51,15 @@ class ComaDataset(InMemoryDataset):
     @property
     def processed_file_names(self):
         processed_files = ['training.pt', 'val.pt', 'test.pt', 'norm.pt']
-        processed_files = [self.split_term+'_'+pf for pf in processed_files]
+        processed_files = [self.split_term+'/'+pf for pf in processed_files]
         return processed_files
 
     def gather_paths(self, split):
         datapaths = dict()
         if split == 'gnrt' :
             datapaths['all'] = []
-            obj_list = glob(os.path.join(self.root_dir, '*.obj'))
+            obj_list = glob(osp.join(self.root_dir, '*.obj'))
+            print('data length: ', len(obj_list))
             datapaths['all'] = datapaths['all'] + obj_list
         elif split == 'gnrtdx' :
             datapaths['ad'] = []
@@ -203,9 +208,11 @@ class ComaDataset(InMemoryDataset):
                     adjacency = get_vert_connectivity(mesh.v, mesh.f).tocoo()
                     edge_index = torch.Tensor(np.vstack((adjacency.row, adjacency.col)))
                     if key == 'ad' :
-                        data = Data(x=mesh_verts, y=torch.Tensor([1,0]), edge_index=edge_index)
+                        data = Data(x=mesh_verts, y=mesh_verts, label=torch.Tensor([1,0]), edge_index=edge_index)
                     elif key == 'cn' :
-                        data = Data(x=mesh_verts, y=torch.Tensor([0,1]), edge_index=edge_index)
+                        data = Data(x=mesh_verts, y=mesh_verts, label=torch.Tensor([0,1]), edge_index=edge_index)
+                    elif key == 'all' :
+                        data = Data(x=mesh_verts, y=mesh_verts, edge_index=edge_index)
 
                 if idx % 100 < 10:
                     test_data.append(data)
@@ -239,7 +246,7 @@ def prepare_gnrt_dataset(path):
     ComaDataset(path, split='gnrt', split_term='gnrt', pre_transform=Normalize())
 
 def prepare_gnrtdx_dataset(path):
-    ComaDataset(path, split='gnrtdx', split_term='gnrtdxb', pre_transform=Normalize())
+    ComaDataset(path, split='gnrtdx', split_term='gnrtdx', pre_transform=Normalize())
 
 def prepare_lgtd_dataset(path):
     ComaDataset(path, split='lgtd', split_term='lgtd', pre_transform=Normalize())
