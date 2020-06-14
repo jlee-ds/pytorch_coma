@@ -35,8 +35,8 @@ class Coma(torch.nn.Module):
         x = x.reshape(batch_size, -1, self.filters[0])
         mu, logvar = self.encoder(x)
         x = self.reparameterize(mu, logvar)
-        y = torch.reshape(data.y, (batch_size, self.cond_dim))
-        x = torch.cat((x, y), dim=1)
+        label = torch.reshape(data.label, (batch_size, self.cond_dim))
+        x = torch.cat((x, label), dim=1)
 
         x = self.decoder(x)
         x = x.reshape(-1, self.filters[0])

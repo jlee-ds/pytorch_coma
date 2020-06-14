@@ -8,7 +8,7 @@ from psbody.mesh import Mesh, MeshViewers
 import mesh_operations
 from config_parser import read_config
 from data import ComaDataset
-from model_cae_vc import Coma
+from model_cvae import Coma
 from transform import Normalize
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
@@ -41,8 +41,6 @@ def main(args):
         print('Config not found' + args.conf)
 
     config = read_config(args.conf)
-    for k in config.keys() :
-        print(k, config[k])
 
     print('Initializing parameters')
     template_file_path = config['template_fname']
@@ -132,18 +130,24 @@ def main(args):
 
     from datetime import datetime
     current_time = datetime.now().strftime('%b%d_%H-%M-%S')
-    log_dir = os.path.join('runs/lcae_vc_de2', current_time)
-    writer = SummaryWriter(log_dir+'_lr0.08_wd0.0003_ds2')
+    log_dir = os.path.join('runs/cvae_dx', current_time)
+    writer = SummaryWriter(log_dir+'ds2_lr0.04_z2_kld_v5')
+    print(coma.z)
 
     for epoch in range(start_epoch, total_epochs + 1):
         print("Training for epoch ", epoch)
-        train_loss = train(coma, train_loader, len(dataset), optimizer, device)
-        val_loss = evaluate(coma, output_dir, val_loader, dataset_val, template_mesh, device, epoch, visualize=visualize)
+        recon_loss, kld_loss, mu, var, kld_weight = train(coma, train_loader, len(dataset), optimizer, device, epoch)
+        val_loss = evaluate(coma, output_dir, val_loader, dataset_val, template_mesh, device, visualize=visualize)
+        train_loss = recon_loss + kld_loss
+        writer.add_scalar('loss/train_loss', recon_loss + kld_loss, epoch)
+        writer.add_scalar('train_loss/recon_loss', recon_loss, epoch)
+        writer.add_scalar('train_loss/kld_loss', kld_loss, epoch)
+        writer.add_scalar('loss/val_loss', val_loss, epoch)
+        writer.add_histogram('hist/mean', mu, epoch)
+        writer.add_histogram('hist/variance', var, epoch)
 
-        writer.add_scalar('data/train_loss', train_loss, epoch)
-        writer.add_scalar('data/val_loss', val_loss, epoch)
-
-        print('epoch ', epoch,' Train loss ', train_loss, ' Val loss ', val_loss)
+        print('epoch ', epoch,' Recon loss ', recon_loss, ' KLD loss ', kld_loss,' Val loss ', val_loss)
+        print('kld weight ', kld_weight)
         if val_loss < best_val_loss:
             save_model(coma, optimizer, epoch, train_loss, val_loss, checkpoint_dir)
             best_val_loss = val_loss
@@ -162,46 +166,58 @@ def main(args):
 
     writer.close()
 
-def train(coma, train_loader, len_dataset, optimizer, device):
+def train(coma, train_loader, len_dataset, optimizer, device, epoch):
     coma.train()
     total_loss = 0
+    recon_loss = 0
+    kld_loss = 0
+    i = 0
+    mu_total = np.asarray([])
+    var_total = np.asarray([])
     for data in tqdm(train_loader):
+        i += 1
         data = data.to(device)
         optimizer.zero_grad()
-        out = coma(data)
-        loss = F.l1_loss(out, data.y-data.x)
-        total_loss += data.num_graphs * loss.item()
+        out, mu, logvar = coma(data)
+        loss = F.l1_loss(out, data.x)
+        kld = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+        #kld /= coma.z
+        #kld /= data.num_graphs
+        recon_loss += data.num_graphs * loss.item()
+        kld_loss += kld.item() # * data.num_graphs
+        mu_total = np.r_[mu_total, torch.reshape(mu,
+            (1, data.num_graphs * coma.z)).detach().cpu().numpy()[0]]
+        var_total = np.r_[var_total, torch.reshape(logvar.exp(),
+            (1, data.num_graphs * coma.z)).detach().cpu().numpy()[0]]
+        iteration = (epoch-1)*len(train_loader) + i
+        kld_weight = float(1/(1+np.exp(-0.0008*(iteration - 15000))))
+        loss = loss + kld_weight * kld
         loss.backward()
         optimizer.step()
-    return total_loss / len_dataset
+    print('iter ', iteration, '  ', end='')
+    return recon_loss / len_dataset, kld_loss / len_dataset, mu_total, var_total, kld_weight
 
-def evaluate(coma, output_dir, test_loader, dataset, template_mesh, device, epoch, visualize=False):
+def evaluate(coma, output_dir, test_loader, dataset, template_mesh, device, visualize=False):
     coma.eval()
     total_loss = 0
     if visualize :
-        meshviewer = MeshViewers(shape=(1, 3))
+        meshviewer = MeshViewers(shape=(1, 2))
     for i, data in enumerate(test_loader):
         data = data.to(device)
         with torch.no_grad():
-            out = coma(data)
-        loss = F.l1_loss(out, data.y-data.x)
+            out, _, _ = coma(data)
+        loss = F.l1_loss(out, data.x)
         total_loss += data.num_graphs * loss.item()
 
-        if visualize and i % 15 == 0 and i != 0:
-            save_out = (out+data.x).detach().cpu().numpy()
-            base_input = data.x.detach().cpu().numpy()
-            expected_out = data.y.detach().cpu().numpy()
-            if dataset.pre_transform is not None :
-                save_out = save_out*dataset.std.numpy()+dataset.mean.numpy()
-                expected_out = (data.x.detach().cpu().numpy())*dataset.std.numpy()+dataset.mean.numpy()
-                base_input = base_input*dataset.std.numpy()+dataset.mean.numpy()
+        if visualize and i % 100 == 0:
+            save_out = out.detach().cpu().numpy()
+            save_out = save_out*dataset.std.numpy()+dataset.mean.numpy()
+            expected_out = (data.x.detach().cpu().numpy())*dataset.std.numpy()+dataset.mean.numpy()
             result_mesh = Mesh(v=save_out, f=template_mesh.f)
             expected_mesh = Mesh(v=expected_out, f=template_mesh.f)
-            base_mesh = Mesh(v=base_input, f=template_mesh.f)
-            meshviewer[0][0].set_dynamic_meshes([base_mesh])
+            meshviewer[0][0].set_dynamic_meshes([result_mesh])
             meshviewer[0][1].set_dynamic_meshes([expected_mesh])
-            meshviewer[0][2].set_dynamic_meshes([result_mesh])
-            meshviewer[0][0].save_snapshot(os.path.join(output_dir, str(i)+'.png'), blocking=False)
+            meshviewer[0][0].save_snapshot(os.path.join(output_dir, 'file'+str(i)+'.png'), blocking=False)
 
     return total_loss/len(dataset)
 
@@ -209,14 +225,13 @@ def evaluate(coma, output_dir, test_loader, dataset, template_mesh, device, epoc
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Pytorch Trainer for Convolutional Mesh Autoencoders')
-    parser.add_argument('-c', '--conf', default='cfgs/lcae_vc_de2.cfg', help='path of config file')
-    parser.add_argument('-s', '--split', default='lgtdvc', help='split can be gnrt, clsf, or lgtd')
-    parser.add_argument('-st', '--split_term', default='lgtdvc', help='split can be gnrt, clsf, or lgtd')
+    parser.add_argument('-c', '--conf', help='path of config file')
+    parser.add_argument('-s', '--split', default='gnrt', help='split can be gnrt, clsf, or lgtd')
+    parser.add_argument('-st', '--split_term', default='gnrt', help='split can be gnrt, clsf, or lgtd')
     parser.add_argument('-d', '--data_dir', help='path where the downloaded data is stored')
     parser.add_argument('-cp', '--checkpoint_dir', help='path where checkpoints file need to be stored')
 
     args = parser.parse_args()
-    print(args)
 
     if args.conf is None:
         args.conf = os.path.join(os.path.dirname(__file__), 'default.cfg')

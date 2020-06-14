@@ -22,12 +22,108 @@ def scipy_to_torch_sparse(scp_matrix):
     sparse_tensor = torch.sparse.FloatTensor(i, v, torch.Size(shape))
     return sparse_tensor
 
+def ad_hc_eval_error(model, test_loader, device, meshdata, out_dir=False):
+    model.eval()
+
+    errors = []
+    ad_errors = []
+    cn_errors = []
+    mean = meshdata.mean
+    std = meshdata.std
+    with torch.no_grad():
+        for i, data in enumerate(test_loader):
+            x = data.to(device)
+            pred = model(x)
+            pred = pred
+            num_graphs = data.num_graphs
+            y = data.y
+            reshaped_pred = (pred.view(num_graphs, -1, 3).cpu() * std) + mean
+            reshaped_y = (y.view(num_graphs, -1, 3).cpu() * std) + mean
+
+            #reshaped_pred *= 1000
+            #reshaped_y *= 1000
+
+            tmp_error = torch.sqrt(
+                torch.sum((reshaped_pred - reshaped_y)**2,
+                          dim=2))  # [num_graphs, num_nodes]
+            errors.append(tmp_error)
+            if torch.all(torch.eq(data.label, torch.Tensor([1,0]))) :
+                ad_errors.append(tmp_error)
+            else :
+                cn_errors.append(tmp_error)
+
+        new_errors = torch.cat(errors, dim=0)  # [n_total_graphs, num_nodes]
+        ad_new_errors = torch.cat(ad_errors, dim=0)
+        cn_new_errors = torch.cat(cn_errors, dim=0)
+
+        mean_error = new_errors.view((-1, )).mean()
+        std_error = new_errors.view((-1, )).std()
+        median_error = new_errors.view((-1, )).median()
+        ad_mean_error = ad_new_errors.view((-1, )).mean()
+        ad_std_error = ad_new_errors.view((-1, )).std()
+        ad_median_error = ad_new_errors.view((-1, )).median()
+        cn_mean_error = cn_new_errors.view((-1, )).mean()
+        cn_std_error = cn_new_errors.view((-1, )).std()
+        cn_median_error = cn_new_errors.view((-1, )).median()
+
+    message = 'Error: {:.3f}+{:.3f} | {:.3f}'.format(mean_error, std_error,
+                                                     median_error)
+    ad_message = 'Error: {:.3f}+{:.3f} | {:.3f}'.format(ad_mean_error, ad_std_error,
+                                                     ad_median_error)
+    cn_message = 'Error: {:.3f}+{:.3f} | {:.3f}'.format(cn_mean_error, cn_std_error,
+                                                     cn_median_error)
+    if out_dir :
+        out_error_fp = out_dir + '/euc_errors.txt'
+        with open(out_error_fp, 'a') as log_file:
+            log_file.write('{:s}\n'.format(message))
+    print(message)
+    print(ad_message)
+    print(cn_message)
+    return [message, ad_message, cn_message]
+
+def eval_error(model, test_loader, device, meshdata, out_dir=False):
+    model.eval()
+
+    errors = []
+    mean = meshdata.mean
+    std = meshdata.std
+    with torch.no_grad():
+        for i, data in enumerate(test_loader):
+            x = data.to(device)
+            pred = model(x)
+            num_graphs = data.num_graphs
+            y = data.y
+            reshaped_pred = (pred.view(num_graphs, -1, 3).cpu() * std) + mean
+            reshaped_y = (y.view(num_graphs, -1, 3).cpu() * std) + mean
+
+            #reshaped_pred *= 1000
+            #reshaped_y *= 1000
+
+            tmp_error = torch.sqrt(
+                torch.sum((reshaped_pred - reshaped_y)**2,
+                          dim=2))  # [num_graphs, num_nodes]
+            errors.append(tmp_error)
+        new_errors = torch.cat(errors, dim=0)  # [n_total_graphs, num_nodes]
+
+        mean_error = new_errors.view((-1, )).mean()
+        std_error = new_errors.view((-1, )).std()
+        median_error = new_errors.view((-1, )).median()
+
+    message = 'Error: {:.3f}+{:.3f} | {:.3f}'.format(mean_error, std_error,
+                                                     median_error)
+    if out_dir :
+        out_error_fp = out_dir + '/euc_errors.txt'
+        with open(out_error_fp, 'a') as log_file:
+            log_file.write('{:s}\n'.format(message))
+    print(message)
+    return message
+
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Pytorch Trainer for Convolutional Mesh Autoencoders')
-    parser.add_argument('-c', '--conf', default='cfgs/ae.cfg', help='path of config file')
+    parser.add_argument('-c', '--conf', default='cfgs/ae_dx.cfg', help='path of config file')
     parser.add_argument('-s', '--split', default='gnrtdx', help='split can be gnrt, clsf, or lgtd')
-    parser.add_argument('-st', '--split_term', default='gnrtdxb', help='split can be gnrt, clsf, or lgtd')
+    parser.add_argument('-st', '--split_term', default='gnrtdx', help='split can be gnrt, clsf, or lgtd')
     parser.add_argument('-d', '--data_dir', help='path where the downloaded data is stored')
     parser.add_argument('-cp', '--checkpoint_dir', help='path where checkpoints file need to be stored')
     cols = 8
@@ -78,17 +174,23 @@ if __name__ == '__main__':
         coma.load_state_dict(checkpoint['state_dict'])
     coma.to(device)
 
+    if args.split_term in 'gnrtdxb' :
+        message = ad_hc_eval_error(coma, data_loader, device, dataset)
+    else :
+        message = eval_error(coma, data_loader, device, dataset)
+
     meshviewer = MeshViewers(shape=(3, cols))
     for row in meshviewer :
         for window in row :
             window.set_background_color(np.asarray([1.0, 1.0, 1.0]))
+
     coma.eval()
 
     exit = 0
     cnt = 0
     for i, data in enumerate(data_loader) :
         data = data.to(device)
-        print(cnt, data.y)
+        # print(cnt, data.y)
         with torch.no_grad():
             out = coma(data)
         save_out = out.detach().cpu().numpy()

@@ -19,7 +19,7 @@ class ComaDataset(InMemoryDataset):
         self.transform = transform
         self.pre_tranform = pre_transform
         # Downloaded data is present in following format root_dir/*/*/*.py
-        self.data_file = self.gather_paths(self.split)
+        self.data_file = self.gather_paths(self.split_term)
         super(ComaDataset, self).__init__(root_dir, transform, pre_transform)
         if dtype == 'train':
             data_path = self.processed_paths[0]
@@ -50,10 +50,10 @@ class ComaDataset(InMemoryDataset):
         processed_files = [self.split_term+'_'+pf for pf in processed_files]
         return processed_files
 
-    def gather_paths(self, split):
+    def gather_paths(self, st):
         datapaths = dict()
         count = 0
-        if split == 'clsfb' :
+        if st == 'clsfb' :
             datapaths['ad'] = dict()
             datapaths['cn'] = dict()
             datapaths['ad']['train'] = []

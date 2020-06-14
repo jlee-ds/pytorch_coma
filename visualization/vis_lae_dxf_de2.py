@@ -25,10 +25,10 @@ def scipy_to_torch_sparse(scp_matrix):
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Pytorch Trainer for Convolutional Mesh Autoencoders')
-    parser.add_argument('-c', '--conf', default='cfgs/lcae_dxb_de2.cfg', help='path of config file')
-    parser.add_argument('-s', '--split', default='lgtddxb', help='split can be lgtddxb or lgtddxf')
-    parser.add_argument('-st', '--split_term', default='lgtddxb', help='split can be lgtddxb or lgtddxf')
-    parser.add_argument('-d', '--data_dir', default='data/ADNI2_data', help='path where the downloaded data is stored')
+    parser.add_argument('-c', '--conf', default='cfgs/lae_dxf_de2.cfg', help='path of config file')
+    parser.add_argument('-s', '--split', default='lgtddxo', help='split can be lgtddxb or lgtddxf')
+    parser.add_argument('-st', '--split_term', default='lgtddxo', help='split can be lgtddxb or lgtddxf')
+    parser.add_argument('-d', '--data_dir', default='data/ADNI2_data_all', help='path where the downloaded data is stored')
     parser.add_argument('-cp', '--checkpoint_dir', help='path where checkpoints file need to be stored')
     cols = 8
 
@@ -118,9 +118,9 @@ if __name__ == '__main__':
         base_mesh = Mesh(v=base_input, f=template_mesh.f)
 
         max_dist = np.max([np.max(ad_result_delta), np.max(cn_result_delta),np.max(expected_delta)])
-        ad_result_mesh.set_vertex_colors_from_weights(ad_result_delta * 10, scale_to_range_1=False, color=True)
-        cn_result_mesh.set_vertex_colors_from_weights(cn_result_delta * 10, scale_to_range_1=False, color=True)
-        expected_mesh.set_vertex_colors_from_weights(expected_delta * 10, scale_to_range_1=False, color=True)
+        ad_result_mesh.set_vertex_colors_from_weights(ad_result_delta*10, scale_to_range_1=False, color=True)
+        cn_result_mesh.set_vertex_colors_from_weights(cn_result_delta*10, scale_to_range_1=False, color=True)
+        expected_mesh.set_vertex_colors_from_weights(expected_delta*10, scale_to_range_1=False, color=True)
         meshviewer[3][cnt].set_dynamic_meshes([base_mesh])
         meshviewer[2][cnt].set_dynamic_meshes([expected_mesh])
         meshviewer[1][cnt].set_dynamic_meshes([ad_result_mesh])

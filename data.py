@@ -89,7 +89,7 @@ class ComaDataset(InMemoryDataset):
                 bl_path = self.root_dir+'/'+str(blm24['bl'])+'-L_Hipp_first.obj'
                 m24_path = self.root_dir+'/'+str(blm24['m24'])+'-L_Hipp_first.obj'
                 datapaths['lgtd'].append([bl_path, m24_path])
-        elif split == 'lgtddxb' :
+        elif split == 'lgtddxi' :
             print('lgtdc dataset file paths...')
             ad_count, cn_count = 0, 0;
             datapaths['lgtddx'] = []
@@ -99,7 +99,7 @@ class ComaDataset(InMemoryDataset):
 
             for i in range(len(bl_m24_ids)):
                 blm24 = bl_m24_ids.loc[i]
-                # for lgtddxf, change 'bl' to 'm24' in the below code line.
+                # for lgtddxo, change 'bl' to 'm24' in the below code line.
                 bl_DX = adni_info[adni_info['ImageUID'] == blm24['bl']].iloc[0]['DX']
                 #print(bl_DX)
                 if bl_DX in ['CN', 'Dementia'] :
@@ -112,7 +112,7 @@ class ComaDataset(InMemoryDataset):
                     datapaths['lgtddx'].append([bl_path, m24_path, bl_class])
             print('length of dataset is %d'%(ad_count+cn_count))
             print(ad_count, cn_count)
-        elif split == 'lgtddxf' :
+        elif split == 'lgtddxo' :
             print('lgtdc dataset file paths...')
             ad_count, cn_count = 0, 0;
             datapaths['lgtddx'] = []
@@ -251,11 +251,11 @@ def prepare_gnrtdx_dataset(path):
 def prepare_lgtd_dataset(path):
     ComaDataset(path, split='lgtd', split_term='lgtd', pre_transform=Normalize())
 
-def prepare_lgtddxb_dataset(path):
-    ComaDataset(path, split='lgtddxb', split_term='lgtddxb', pre_transform=Normalize())
+def prepare_lgtddxi_dataset(path):
+    ComaDataset(path, split='lgtddxi', split_term='lgtddxi', pre_transform=Normalize())
 
-def prepare_lgtddxf_dataset(path):
-    ComaDataset(path, split='lgtddxf', split_term='lgtddxf', pre_transform=Normalize())
+def prepare_lgtddxo_dataset(path):
+    ComaDataset(path, split='lgtddxo', split_term='lgtddxo', pre_transform=Normalize())
 
 def prepare_lgtdvc_dataset(path):
     ComaDataset(path, split='lgtdvc', split_term='lgtdvc', pre_transform=Normalize())
@@ -276,10 +276,10 @@ if __name__ == '__main__':
         prepare_gnrtdx_dataset(data_dir)
     elif split == 'lgtd':
         prepare_lgtd_dataset(data_dir)
-    elif split == 'lgtddxb':
-        prepare_lgtddxb_dataset(data_dir)
-    elif split == 'lgtddxf':
-        prepare_lgtddxf_dataset(data_dir)
+    elif split == 'lgtddxi':
+        prepare_lgtddxi_dataset(data_dir)
+    elif split == 'lgtddxo':
+        prepare_lgtddxo_dataset(data_dir)
     elif split == 'lgtdvc':
         prepare_lgtdvc_dataset(data_dir)
     else:

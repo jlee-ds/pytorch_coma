@@ -133,7 +133,7 @@ def main(args):
     from datetime import datetime
     current_time = datetime.now().strftime('%b%d_%H-%M-%S')
     log_dir = os.path.join('runs/lae', current_time)
-    writer = SummaryWriter(log_dir+'_lr0.1_wd0.0009')
+    writer = SummaryWriter(log_dir+'ds2_lr0.04_z8')
 
     for epoch in range(start_epoch, total_epochs + 1):
         print("Training for epoch ", epoch)
